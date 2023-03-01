@@ -1,45 +1,29 @@
-use std::{
-	fs,
-	io::{prelude::*, BufReader},
-	net::{TcpListener, TcpStream},
-};
+mod connection;
+mod http;
+mod tcp;
 
-fn main() -> std::io::Result<()> {
-	let listener = TcpListener::bind("127.0.0.1:7878")?;
-  
-  for stream in listener.incoming() {
-		let stream = stream.unwrap();
-    
-		handle_connection(stream);
-  }
-	Ok(())
+use std::net;
+
+use clap::Parser;
+
+/// A modern webserver
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// IP address
+    #[arg(short, long, default_value_t = net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)))]
+    ip: net::IpAddr,
+
+    /// Port number
+    #[arg(short, long, default_value_t = 0)]
+    port: u16,
 }
 
-fn handle_connection(mut stream: TcpStream) {
-	let buf_reader = BufReader::new(&mut stream);
-	let http_request: Vec<_> = buf_reader
-		.lines()
-		.map(|result| result.unwrap())
-		.take_while(|line| !line.is_empty())
-		.collect();
-	let request_line = if http_request.len() > 0 {
-		&http_request[0]
-	} else {
-		""
-	};
+fn main() {
+    let args = Args::parse();
 
-	let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
-		("HTTP/1.1 200 OK", "index.html")
-  } else {
-		("HTTP/1.1 404 NOT FOUND", "404.html")
-	};
-
-	let contents = fs::read_to_string(filename).unwrap();
-	let length = contents.len();
-	let response = format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
-
-	stream.write_all(response.as_bytes()).unwrap();
-
-	println!("Request: {:#?}", http_request);
+    match tcp::listen(args.ip, args.port) {
+        Err(error) => println!("Error: {}", error),
+        _ => (),
+    }
 }
-
